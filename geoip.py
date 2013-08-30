@@ -8,7 +8,6 @@ import pygeoip
 import sys
 
 import settings
-import DataConnect
 
 class Geoip(object):
     

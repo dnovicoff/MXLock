@@ -21,8 +21,6 @@ from dns.rdataclass import *
 from dns.rdatatype import *
 
 import settings
-import Domain
-import DomainsReader
 import geoip
 import DataConnect
 import NamedNonBlockingResolver
@@ -54,7 +52,7 @@ class DNSDomainResolver(object):
                 for row in rows:
                     keys['city'] = int(row[0])
             keys['country'] = self.getGEOIPCountry(name,code,addr)
-            if ci['country_code'] == 'US':
+            if ci['city'] != "" and ci['region_name'] != "":
                 insert = "INSERT INTO geo_city (city,state,zip,area_code,geo_country_id) VALUES ('%s','%s','%s','%s',%s)" % (ci['city'],ci['region_name'],ci['postal_code'],ci['area_code'],keys['country'])
                 key = self.connect.insertQuery(insert)
                 keys['city'] = self.connect.getLastInsertID()
@@ -92,19 +90,19 @@ class DNSDomainResolver(object):
                     minimum = results['minimum']
                     sql = "UPDATE soa SET ttl=%s,expire=%s,refresh=%s,retry=%s,minimum=%s WHERE soa_id=%s" % (ttl,expire,refresh,retry,minimum,soaID)
                     count = self.connect.updateQuery(sql)
+                    if int(soaID) == 21 or int(soaID) == 23:
+                        print "Count: %s %s" % (count,sql)
         except:
             print ("DNSDomainResolver update SOA error %s" % sys.exc_info()[0])
-        return count
-    
-    def setDomainSerial(self,serial,dnsID):
-        sql = "INSERT IGNORE INTO soa_serial (soa_id,serial) VALUES (%s,%s)" % (dnsID,serial)
-        count = self.connect.insertQuery(sql)
         return count
     
     def getDomainAddress(self,domain):
         results = []
         try:
-            answer = dns.resolver.query(domain,'A')
+            ### query = dns.resolver.Resolver()
+            ### query.nameservers=[socket.gethostbyname(self.resolvers[self.resolverPos])]
+            ### query.timeout = 2.0
+            answer = self.query.query(domain,'A')
             for rdata in answer:
                 results.append(rdata.address)
         except DNSException, e:
@@ -113,48 +111,83 @@ class DNSDomainResolver(object):
     
     def getDomainSerial(self,domain,dnsID):
         queryType = "SOA"
-        query = dns.resolver.Resolver()
-        query.nameservers=[socket.gethostbyname(settings.DBG_RESOLVERS)]
-        query.timeout = 2.0
-        result = query.query(domain,queryType)
-        tmp = str(result.rrset).split(" ")
         results = {}
-        results[domain] = self.getDomainAddress(domain)
-        results['serial'] = tmp[6]
-        results['refresh'] = tmp[7]
-        results['retry'] = tmp[8]
-        results['expire'] = tmp[9]
-        results['minimum'] = tmp[10]
-        results['ttl'] = result.rrset.ttl
+        try:
+            ### query = dns.resolver.Resolver()
+            ### query.nameservers=[socket.gethostbyname(self.resolvers[self.resolverPos])]
+            ### query.timeout = 2.0
+            result = self.query.query(domain,queryType)
+            tmp = str(result.rrset).split(" ")
+            results[domain] = self.getDomainAddress(domain)
+            results['serial'] = tmp[6]
+            results['refresh'] = tmp[7]
+            results['retry'] = tmp[8]
+            results['expire'] = tmp[9]
+            results['minimum'] = tmp[10]
+            results['ttl'] = result.rrset.ttl
+        except DNSException as e:
+            print "Error: DNSDomainResolver: %s" % (e)
         return results
         
     def getMXNameAndAddress(self,domain,dnsID):
         results = {}
         try:
-            answer = dns.resolver.query(domain,'MX')
+            ### query = dns.resolver.Resolver()
+            ### query.nameservers=[socket.gethostbyname(self.resolvers[self.resolverPos])]
+            ### query.timeout = 2.0
+            answer = self.query.query(domain,'MX')
             for rdata in answer:
+                result = {}
                 exchangeServer = rdata.exchange
-                address = dns.resolver.query(exchangeServer,'A')
-                for adata in address:
-                    exchangeAddress = adata.address
-                results[exchangeServer] = exchangeAddress
-                results['expire'] = answer.expiration
-                results['ttl'] = answer.rrset.ttl
+                result[exchangeServer] = self.getDomainAddress(exchangeServer)
+                result['expire'] = answer.expiration
+                result['ttl'] = answer.rrset.ttl
+                result['priority'] = rdata.preference
+                results[exchangeServer] = result
         except DNSException, e:
             print ("DNS error: %s %s %s" % (e.__class__,e,domain))
         return results
     
-    def recordResponse(self,results,soaID,uType,serial):
+    def recordResponse(self,results,soaID,uType,serial,timestamp):
         try:
             for key in results:
-                if key != 'expire' and key != 'ttl':
-                    dKey = str(key)[:-1]
-                    locationName = self.gip.getCountryNameByAddr(results[key])
-                    locationCode = self.gip.getCountryCodeByName(dKey)
-                    geoipKey = self.recordGEOIP(locationName, locationCode,results[key])
+                tmp = results[key]
+                addrTmp = tmp[key]
+                dKey = str(key)[:-1]
+                rr_id = 0
+                rr_address_id = 0
                     
-                    sql = "INSERT INTO rr (soa_id,serial,name,data,type_id,geo_coordinate_id) VALUES (%s,%s,'%s','%s',%s,%s) " % (soaID,serial,key,results[key],uType,geoipKey)
+                sql = "SELECT * FROM rr WHERE name='%s'" % (key)
+                rows = self.connect.execQuery(sql)
+                if rows:
+                    for row in rows:
+                        rr_id = row[5]
+                    sql = "UPDATE rr SET serial='%s',name='%s',priority=%s WHERE rr_id=%s" % (serial,key,tmp['priority'],soaID)
+                    count = self.connect.updateQuery(sql)
+                else:
+                    sql = "INSERT INTO rr (soa_id,serial,name,priority,type_id) VALUES (%s,%s,'%s',%s,%s) " % (soaID,serial,key,tmp['priority'],uType)
                     count = self.connect.insertQuery(sql)
+                    rr_id = self.connect.getLastInsertID()
+
+                for aTmp in addrTmp:
+                    locationName = self.gip.getCountryNameByAddr(aTmp)
+                    locationCode = self.gip.getCountryCodeByName(dKey)
+                    geoipKey = self.recordGEOIP(locationName, locationCode,aTmp)
+                    
+                    sql = "SELECT * FROM rr_address WHERE rr_address='%s'" % aTmp
+                    rows = self.connect.execQuery(sql)
+                    if rows:
+                        for row in rows:
+                            rr_address_id = row[0]
+                    else:
+                        sql = "INSERT INTO rr_address (rr_address,geo_coordinate_id) VALUES ('%s',%s)" % (aTmp,geoipKey)
+                        count = self.connect.insertQuery(sql)
+                        rr_address_id = self.connect.getLastInsertID()
+                        
+                    sql = "INSERT INTO rr_history VALUES (%s,%s,'%s')" % (rr_id,rr_address_id,timestamp)
+                    count = self.connect.insertQuery(sql)
+                    
+            return count
         except:
             print ("DNSDomainResolver record response error %s" % sys.exc_info()[0])
     
@@ -170,8 +203,23 @@ class DNSDomainResolver(object):
     def endCursor(self):
         self.connect.endCursor()
     
+    def adjustResolverPos(self):
+        self.resolverPos += 1
+        if int(self.resolverPos) >= int(self.resolverCount):
+            self.resolverPos = 0
+        self.query.nameservers=[socket.gethostbyname(self.resolvers[self.resolverPos])]
+        self.query.timeout = 2.0
+    
     def __init__(self):
-        self.resolver = NamedNonBlockingResolver.NamedNonBlockingResolver()
+        ##3 self.resolver = NamedNonBlockingResolver.NamedNonBlockingResolver()
         self.connect = DataConnect.DatabaseConnection()
         self.gip = geoip.Geoip()
+        self.resolvers = settings.DBG_RESOLVERS
+        self.resolvers = self.resolvers.split(" ")
+        self.resolverCount = len(self.resolvers)
+        self.resolverPos = 0
+        self.query = dns.resolver.Resolver()
+        self.adjustResolverPos()
+        
+        
         

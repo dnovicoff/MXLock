@@ -3,19 +3,17 @@ File: DomainResolver.py
 Purpose:
 Copywrite: Sendwell 2013
 """
-import time
 import sys
 
-import Domain
-import DomainsReader
+import MXLockClasses
 import DataConnect
 from DNSDomainResolver import DNSDomainResolver
 
 class DomainResolver():
     
     def resolveDomains(self):
-        timestamp = int(round(time.time()))
-        timeForQuery = timestamp-(360)
+        timestamp = MXLockClasses.getTimestamp()
+        timeForQuery = timestamp-(600)
         self.resolveDomains = []
 
         """ Move to DNSDomainResolver """        
@@ -29,7 +27,7 @@ class DomainResolver():
         domainResolver = DNSDomainResolver()
         
         """ Move this to DNSDomainResolver """
-        select = "SELECT * FROM soa WHERE last_check < %s LIMIT 100" % timeForQuery
+        select = "SELECT * FROM soa WHERE soa_id>%s AND soa_id<%s AND last_check < %s LIMIT %s" % (self.begin,self.interval,timeForQuery,self.interval)
         self.connection.startTransaction()
         rows = self.connection.execQuery(select)
         self.connection.endCursor()
@@ -38,23 +36,24 @@ class DomainResolver():
         for row in rows:
             try:
                 soaID = row[0]
-                ids += str(row[0])+","
                 domain = row[1]
-                print("Working with domain: %s" % domain)
+                print "Working with domain: %s" % (domain)
                 serial = domainResolver.getDomainSerial(domain, soaID) 
                 if serial['serial'] != "":
                     domainResolver.startTransaction()
-                    success = domainResolver.setDomainSerial(serial['serial'], soaID)
+                    success = domainResolver.updateSOA(serial,soaID)
                     if success > 0:
-                        success = domainResolver.updateSOA(serial,soaID)
+                        results = domainResolver.getMXNameAndAddress(domain, soaID)
+                        success = domainResolver.recordResponse(results,soaID,types['MX'],serial['serial'],timeForQuery)
                         if success > 0:
-                            results = domainResolver.getMXNameAndAddress(domain, soaID)
-                            domainResolver.recordResponse(results,soaID,types['MX'],serial['serial'])
                             domainResolver.commitTransaction()
+                            ids += str(row[0])+","
+                            domainResolver.adjustResolverPos()
                         else:
                             domainResolver.rollbackTransaction()
                     else:
                         domainResolver.rollbackTransaction()
+                    domainResolver.endCursor()
             except:
                 print("Error: DomainResolver: %s" % sys.exc_info()[0])
 
@@ -68,8 +67,13 @@ class DomainResolver():
         
         return rowsAffected
             
-    def __init__(self):
+    def __init__(self,begin,interval):
         self.connection = DataConnect.DatabaseConnection()
+        self.begin = begin
+        self.interval = interval
+        
+        
+        
         
         
          

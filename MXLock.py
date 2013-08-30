@@ -9,9 +9,11 @@ import string
 from argparse import ArgumentParser,ArgumentTypeError,FileType
 
 import settings
+import client
 import DNSWorker
+import DomainWhoisWorker
 import DNSModule
-import AsyncDomainReaderWorker
+import DomainsReader
 import DomainsImporter
 import MemcacheWriterMySQLWorker
 import NamedNonBlockingResolver
@@ -47,14 +49,25 @@ def arguments():
     return res
 
 def start(resolver, memcache):
+    domains = DomainsReader.DomainReader()
+    
     if (resolver):
+        interval = 100
+        domainQty = 100
         #if (settings.DBG_READER == "async"):
         #    asyncDomainWorker = AsyncDomainReaderWorker.AsyncDomainReaderWorker()
         #    asyncDomainWorker.start()
-                                    
+                             
         for x in range(0,settings.DBG_THREADS_RESOLVER):
-            worker = DNSWorker.DNSWorder()
+            split = domainQty/settings.DBG_THREADS_RESOLVER
+            begin = split*x
+            worker = DNSWorker.DNSWorker(begin,interval,domainQty)
             worker.start()
+            
+        domainWhoisWorker = DomainWhoisWorker.DomainWhoisWorker()
+        domainWhoisWorker.start()
+        server = client.client(domains)
+        ### server.start()
         
     if (memcache):
         for x in range(0,settings.DBG_THREADS_MEMCACHE):

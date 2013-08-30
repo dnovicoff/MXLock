@@ -4,7 +4,6 @@ Purpose: Used to handle all database connections.
 Copywrite: Sendwell 2013
 """
 import MySQLdb as mdb
-import threading
 
 import settings
 
