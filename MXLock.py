@@ -5,17 +5,19 @@ Copywrite: 2013 Sendwell Inc.
 """
 
 import sys
-import string
 from argparse import ArgumentParser,ArgumentTypeError,FileType
+from time import sleep
 
 import settings
 import client
 import DNSWorker
+import logger
 import DomainWhoisWorker
+import MXLockClasses
 import DNSModule
 import DomainsReader
 import DomainsImporter
-import MemcacheWriterMySQLWorker
+import MemcacheWriterWorker
 import NamedNonBlockingResolver
 
 def arguments():
@@ -50,10 +52,12 @@ def arguments():
 
 def start(resolver, memcache):
     domains = DomainsReader.DomainReader()
+    logName = MXLockClasses.logName()
+    log = logger.logger(logName)
     
     if (resolver):
         interval = 100
-        domainQty = 100
+        domainQty = 21716
         #if (settings.DBG_READER == "async"):
         #    asyncDomainWorker = AsyncDomainReaderWorker.AsyncDomainReaderWorker()
         #    asyncDomainWorker.start()
@@ -61,11 +65,12 @@ def start(resolver, memcache):
         for x in range(0,settings.DBG_THREADS_RESOLVER):
             split = domainQty/settings.DBG_THREADS_RESOLVER
             begin = split*x
-            worker = DNSWorker.DNSWorker(begin,interval,domainQty)
+            worker = DNSWorker.DNSWorker(begin,interval,domainQty,log)
             worker.start()
+            sleep(5)
             
         domainWhoisWorker = DomainWhoisWorker.DomainWhoisWorker()
-        domainWhoisWorker.start()
+        ### domainWhoisWorker.start()
         server = client.client(domains)
         ### server.start()
         
@@ -105,9 +110,10 @@ def importDomains(filename):
             if line == "" or line.__len__() < 20:
                 continue
             
-            tmpStr = line.split(',')
-            domain = tmpStr[2].split('.')
-            domain = domain[1]+"."+domain[2]
+            domain = line
+            #tmpStr = line.split(',')
+            #domain = tmpStr[2].split('.')
+            #domain = domain[1]+"."+domain[2]
             
             if not domainCheck.has_key(domain):
                 domainCheck[domain] = domain
@@ -147,7 +153,7 @@ if __name__ == "__main__":
     
     if margs.debug:
         today = "today"
-        #debug(margs.debug)
+        debug(margs.debug)
         
     resolver = False
     if margs.resolver:
@@ -162,6 +168,6 @@ if __name__ == "__main__":
     
     if margs.file != "":
         work = 1
-        # importDomains(margs.file)
+        #importDomains(margs.file)
         print ("Imported Ok...")
         
