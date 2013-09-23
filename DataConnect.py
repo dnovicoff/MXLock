@@ -11,103 +11,122 @@ import settings
 
 class DatabaseConnection(object):
     
+    def writeError(self,message):
+        if self.log is None:
+            print "%s" % message
+        else:
+            self.log.writeLog(message)
+    
     def execQuery(self,query):
+        message = ""
         rows = None
         try:
             if self.curs:
                 self.curs.execute(query)
                 rows = self.curs.fetchall()
-        ## except mdb.Error as e:
-        ##    print ("Database Select Error: %s" % e)
         except psycopg2.Error as ge:
-            print "General error({0}): {1}".format(ge.args[0], ge.args[1])
+            message = "General error {0}".format(ge.args[0])[:-2]
         except psycopg2.InterfaceError as e:
-            print "Interface error({0}): {1}".format(e.args[0], e.args[1])
+            message = "Interface error {0}".format(e.args[0])
         except psycopg2.DatabaseError as e:
-            print "Database error({0}): {1}".format(e.args[0], e.args[1])
+            message = "Database error {0}".format(e.args[0])
         except psycopg2.DataError as e:
-            print "Data error({0}): {1}".format(e.args[0], e.args[1])
+            message = "Data error {0}".format(e.args[0])
         except psycopg2.ProgrammingError as e:
-            print "Programming error({0}): {1}".format(e.args[0], e.args[1])
+            message = "Programming error {0}".format(e.args[0])
         except psycopg2.InternalError as e:
-            print "Internal error({0}): {1}".format(e.args[0], e.args[1])
+            message = "Internal error {0}".format(e.args[0])
+        finally:
+            self.writeError(message)
         return rows
     
     def updateQuery(self,query):
+        message = ""
         count = -1
         try:
             if self.curs:
                 self.curs.execute(query)
                 count = self.curs.rowcount
-        ## except mdb.Error as e:
-        ##    print ("Database Update Error: %s" % e)
         except psycopg2.Error as ge:
-            print "General error({0}): {1}".format(ge.args[0], ge.args[1])
+            message = "General error {0}".format(ge.args[0])[:-2]
         except psycopg2.InterfaceError as e:
-            print "Interface error({0}): {1}".format(e.args[0], e.args[1])
+            message = "Interface error {0}".format(e.args[0])
         except psycopg2.DatabaseError as e:
-            print "Database error({0}): {1}".format(e.args[0], e.args[1])
+            message = "Database error {0}".format(e.args[0])
         except psycopg2.DataError as e:
-            print "Data error({0}): {1}".format(e.args[0], e.args[1])
+            message = "Data error {0}".format(e.args[0])
         except psycopg2.ProgrammingError as e:
-            print "Programming error({0}): {1}".format(e.args[0], e.args[1])
+            message = "Programming error {0}".format(e.args[0])
         except psycopg2.InternalError as e:
-            print "Internal error({0}): {1}".format(e.args[0], e.args[1])
+            message = "Internal error {0}".format(e.args[0])
+        finally:
+            self.writeError(message)
         return count
     
     def insertQuery(self,query):
+        message = ""
         count = -1
         try:
             if self.curs:
                 self.curs.execute(query)
                 count = self.curs.rowcount
-        ### except mdb.Error as e:
-        ###    print ("Database Insert Error: %s" % e)
         except psycopg2.Error as ge:
-            print "General error({0}): {1}".format(ge.args[0], ge.args[1])
+            message = "General error({0})".format(ge.args[0])[:-2]
         except psycopg2.InterfaceError as e:
-            print "Interface error({0}): {1}".format(e.args[0], e.args[1])
+            message = "Interface error({0})".format(e.args[0])
         except psycopg2.DatabaseError as e:
-            print "Database error({0}): {1}".format(e.args[0], e.args[1])
+            message = "Database error({0})".format(e.args[0])
         except psycopg2.DataError as e:
-            print "Data error({0}): {1}".format(e.args[0], e.args[1])
+            message = "Data error({0})".format(e.args[0])
         except psycopg2.ProgrammingError as e:
-            print "Programming error({0}): {1}".format(e.args[0], e.args[1])
+            message = "Programming error({0})".format(e.args[0])
         except psycopg2.InternalError as e:
-            print "Internal error({0}): {1}".format(e.args[0], e.args[1])
+            message = "Internal error({0})".format(e.args[0])
+        finally:
+            self.writeError(message)
         return count
     
-    def getLastInsertID(self):
+    def getColumnInteger(self,query):
+        message = ""
         uid = 0
         try:
-            uid = self.conn.insert_id()
-        ### except mdb.Error as e:
-        ###    print("Database last insert ID error %s" % e)
+            if self.curs:
+                self.curs.execute(query)
+                rows = self.curs.fetchall()
+                if rows:
+                    for row in rows:
+                        uid = row[0]
         except psycopg2.Error as ge:
-            print "General error({0}): {1}".format(ge.args[0], ge.args[1])
+            message = "General error({0})".format(ge.args[0])[:-2]
         except psycopg2.InterfaceError as e:
-            print "Interface error({0}): {1}".format(e.args[0], e.args[1])
+            message = "Interface error({0})".format(e.args[0])
         except psycopg2.DatabaseError as e:
-            print "Database error({0}): {1}".format(e.args[0], e.args[1])
+            message = "Database error({0})".format(e.args[0])
         except psycopg2.DataError as e:
-            print "Data error({0}): {1}".format(e.args[0], e.args[1])
+            message = "Data error({0})".format(e.args[0])
         except psycopg2.ProgrammingError as e:
-            print "Programming error({0}): {1}".format(e.args[0], e.args[1])
+            message = "Programming error({0})".format(e.args[0])
         except psycopg2.InternalError as e:
-            print "Internal error({0}): {1}".format(e.args[0], e.args[1])
+            message = "Internal error({0})".format(e.args[0])
+        finally:
+            self.writeError(message)
         return uid
     
     def autocommitTransaction(self):
-        self.conn.autocommit()
+        if self.conn:
+            self.conn.autocommit()
         
     def commitTransaction(self):
-        self.conn.commit()
+        if self.conn:
+            self.conn.commit()
     
     def rollbackTransaction(self):
-        self.conn.rollback()
+        if self.conn:
+            self.conn.rollback()
         
     def endCursor(self):
-        self.curs = None
+        if self.curs:
+            self.curs = None
         
     def startTransaction(self):
         self.conn_string = "host='%s' dbname='%s' user='%s' password='%s'" % (settings.DBG_PGSQL_SERVER,settings.DBG_PGSQL_DATABASE,settings.DBG_PGSQL_USER,settings.DBG_PGSQL_PASS)
@@ -116,7 +135,8 @@ class DatabaseConnection(object):
         self.curs = self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
         ### self.curs = self.conn.cursor() 
     
-    def __init__(self):
+    def __init__(self,log=None):
         self.database = "dns4new"
+        self.log = log
         
         

@@ -11,7 +11,6 @@ import re
 
 import DataConnect
 import DomainRecord
-import DomainsReader
 
 class client(threading.Thread):
 

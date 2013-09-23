@@ -1,14 +1,27 @@
 """
-File: DomainRecord.py
+File : DomainRecord.py
 purpose: Object
 Copywrite: Sendwell 2013
 """
 
 import re
+import DomainMX
 
 class DomainRecord(object):
+    
+    def setMX(self,ID,machine,priority,address,rType):
+        mx = DomainMX.DomainMX(ID,machine,priority,address,rType)
+        self.mx[ID] = mx
+        
+    def getMX(self,rrID):
+        try:
+            if rrID in self.mx:
+                return self.mx[rrID]
+        except KeyError as e:
+            print "DomainRecord error: %s" % (e)
+        
     def getRefresh(self):
-        return self.refresh;
+        return self.refresh
     
     def setRefresh(self,refresh):
         self.refresh = refresh
@@ -60,9 +73,21 @@ class DomainRecord(object):
     
     def setLocked(self,locked):
         self.locked = locked
+
+    def exists(self,ID):
+        try:
+            if ID in self.mx:
+                return True
+            else:
+                return False
+        except KeyError as e:
+            print "DomainRecord error: %s" % (e)
                 
     def toString(self):
-        return "ID\t%s\nOrigin\t%s\nRefresh\t%s\nRetry\t%s\nExpire\t%s\nMinimum\t%s\nTTL\t%s\nLast Check\t%s\nLocked\t%s\n" % (self.getID(),self.getOrigin(),self.getRefresh(),self.getRetry(),self.getExpire(),self.getMinimum(),self.getTTL(),self.getLastCheck(),self.getLocked())
+        results = "ID\t%s\nOrigin\t%s\nRefresh\t%s\nRetry\t%s\nExpire\t%s\nMinimum\t%s\nTTL\t%s\nLast Check\t%s\nLocked\t%s\n" % (self.getID(),self.getOrigin(),self.getRefresh(),self.getRetry(),self.getExpire(),self.getMinimum(),self.getTTL(),self.getLastCheck(),self.getLocked())
+        for key in self.mx:
+            results += self.mx[key].toString()
+        return results
 
     def __init__(self,ID,origin="",minimum=0,TTL=0,refresh=0,retry=0,expire=0,lastcheck=0,locked=False):
         self.minimum = minimum
@@ -74,6 +99,8 @@ class DomainRecord(object):
         self.expire = expire
         self.lastcheck = lastcheck
         self.locked = locked
+        
+        self.mx = {}
         
         
         

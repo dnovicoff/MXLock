@@ -17,15 +17,19 @@ class DomainWhoisWorker(threading.Thread):
     def getWhoisCompanyID(self,company):
         company = company.strip()
         result = 0
-        sql ="SELECT * FROM whois_company WHERE company='%s'" % (company)
+        sql ="SELECT * FROM whois_company WHERE vcompany='%s'" % (company)
         rows = self.connect.execQuery(sql)
         if rows:
             for row in rows:
                 result = row[0]
         else:
-            sql = "INSERT INTO whois_company (company) VALUES ('%s')" % company
+            sql = "INSERT INTO whois_company (vcompany) VALUES ('%s')" % company
             self.connect.insertQuery(sql)
-            result = self.connect.getLastInsertID()
+            sql = "SELECT currval('whois_company_id_seq')"
+            rows = self.connect.execQuery(sql)
+            if rows:
+                for row in rows:
+                    result = row[0]
         return result
         
     def recordAnswer(self,results,soaID):
@@ -36,7 +40,7 @@ class DomainWhoisWorker(threading.Thread):
         
                 result = ""
                 self.connect.startTransaction()
-                sql = "SELECT * FROM whois WHERE soa_id=%s" % (soaID)
+                sql = "SELECT * FROM whois WHERE id=%s" % (soaID)
                 rows = self.connect.execQuery(sql)
                 if rows:
                     for row in rows:
@@ -47,11 +51,14 @@ class DomainWhoisWorker(threading.Thread):
                     self.connect.insertQuery(sql)
                 self.connect.commitTransaction()
             except IndexError as e:
-                print "Error: %s recordAnswer error: %s %s" % (self.threadName,sys.exc_info()[0],e)
+                message =  "DomainWhoisWorker recordAnswer error: %s %s %s" % (self.threadName,sys.exc_info()[0],e)
+                self.log.writeLog(message)
+        else:
+            self.log.writeLog(self.domainWhois.lastRecord)
         
     def getDomains(self):
         timestamp = MXLockClasses.getTimestamp()
-        select = "SELECT soa_id,origin FROM soa WHERE last_check<%s LIMIT 1000" % (timestamp)
+        select = "SELECT id,vorigin FROM soa WHERE id not in (SELECT id FROM whois) LIMIT 1000"
         self.connect.startTransaction()
         rows = self.connect.execQuery(select)
         self.connect.endCursor()
@@ -59,21 +66,27 @@ class DomainWhoisWorker(threading.Thread):
         
     def run(self):
         while True:
-            try:
+            #try:
                 rows = self.getDomains()
-                for row in rows:
-                    soaID = row[0]
-                    domain = row[1]
-                    results = self.domainWhois.getWhois(domain)
-                    results = self.domainWhois.getOwner()
-                    self.recordAnswer(results,soaID)
-                    sleep(600)
-            except:
-                print "Error: DomainWhoisWorker %s %s" % (self.threadName,sys.exc_info()[0])
+                if rows:
+                    for row in rows:
+                        soaID = row[0]
+                        domain = row[1]
+                        results = self.domainWhois.getWhois(domain)
+                        if results:
+                            results = self.domainWhois.getOwner()
+                            self.recordAnswer(results,soaID)
+                        sleep(60)
+                else:
+                    print "No matching records"
+            #except:
+            #    message = "DomainWhoisWorker error: %s %s" % (self.threadName,sys.exc_info()[0])
+            #    self.log.writeLog(message)
     
-    def __init__(self):
+    def __init__(self,log):
         threading.Thread.__init__(self)
         self.domainWhois = DomainWhois.DomainWhois()
-        self.connect = DataConnect.DatabaseConnection()
+        self.connect = DataConnect.DatabaseConnection(log)
         self.threadName = threading.current_thread().name
+        self.log = log
         

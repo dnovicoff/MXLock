@@ -9,13 +9,13 @@ from argparse import ArgumentParser,ArgumentTypeError,FileType
 from time import sleep
 
 import settings
+import DataConnect
 import client
 import DNSWorker
 import logger
+import DomainsReader
 import DomainWhoisWorker
 import MXLockClasses
-import DNSModule
-import DomainsReader
 import DomainsImporter
 import MemcacheWriterWorker
 import NamedNonBlockingResolver
@@ -31,10 +31,10 @@ def arguments():
     parser.add_argument("-v", "--verbosity",  action="count",  
                         help="increase output verbosity (e.g. -v -vv -vvv...)")
     
-    parser.add_argument("-f", "--file", dest="file", default="domains.csv",
-                        help="File name to import from (Default domains.csv)")
+    parser.add_argument("-f", "--file", dest="file",
+                        help="File name to import from (Default domains.txt)")
     
-    parser.add_argument("-n", "--name", dest="name", default="List1", 
+    parser.add_argument("-n", "--name", dest="name", 
                         help="List Name (Default List1")
     
     parser.add_argument("-r", "--resolver", dest="resolver", action="count", 
@@ -51,38 +51,44 @@ def arguments():
     return res
 
 def start(resolver, memcache):
+    connect = DataConnect.DatabaseConnection()
+    connect.startTransaction()
+    domainQty = connect.getColumnInteger("SELECT count(*) FROM soa")
+    firstRecord = connect.getColumnInteger("SELECT id FROM soa ORDER BY id ASC LIMIT 1")
+    connect.endCursor()
+    
     domains = DomainsReader.DomainReader()
     logName = MXLockClasses.logName()
     log = logger.logger(logName)
     
+    interval = 100
+    
     if (resolver):
-        interval = 100
-        domainQty = 21716
-        #if (settings.DBG_READER == "async"):
-        #    asyncDomainWorker = AsyncDomainReaderWorker.AsyncDomainReaderWorker()
-        #    asyncDomainWorker.start()
-                             
+        split = domainQty/settings.DBG_THREADS_RESOLVER
         for x in range(0,settings.DBG_THREADS_RESOLVER):
-            split = domainQty/settings.DBG_THREADS_RESOLVER
-            begin = split*x
-            worker = DNSWorker.DNSWorker(begin,interval,domainQty,log)
+            begin = firstRecord+(x*split)
+            worker = DNSWorker.DNSWorker(begin,interval,domainQty+firstRecord,firstRecord,log)
             worker.start()
             sleep(5)
             
-        domainWhoisWorker = DomainWhoisWorker.DomainWhoisWorker()
-        ### domainWhoisWorker.start()
-        server = client.client(domains)
-        ### server.start()
+        domainWhoisWorker = DomainWhoisWorker.DomainWhoisWorker(log)
+        #domainWhoisWorker.start()
         
     if (memcache):
+        split = domainQty/settings.DBG_THREADS_MEMCACHE
         for x in range(0,settings.DBG_THREADS_MEMCACHE):
-            ### Turn on the memcache stuff
-            x = x + 1
+            begin = firstRecord+(x*split)
+            memcache = MemcacheWriterWorker.MemcacheWriterWorker(domains,begin,interval,domainQty+firstRecord,firstRecord,log)
+            memcache.start()
+            sleep(5)
+    
+    server = client.client(domains)
+    #server.start()
 
 def debug(domainName,dnsServer = None):
     try:
         resolver = NamedNonBlockingResolver.NamedNonBlockingResolver(dnsServer)
-        resolver.setTimeout(3)
+        resolver.setTimeout(settings.DBG_TIMEOUT)
         resolver.setTCP(False)
         resolver.setSingleTCPPort(False)
         
@@ -137,21 +143,6 @@ if __name__ == "__main__":
     SW_DEBUG = False
     if margs.debug:
         SW_DEBUG = True
-    
-    if SW_DEBUG:
-        sqlHost = settings.DBG_PGSQL_SERVER
-        sqlUser = settings.DBG_PGSQL_USER
-        sqlPass = settings.DBG_PGSQL_PASS
-        sqlDB = settings.DBG_PGSQL_DATABASE
-        sqlPort = settings.DBG_PGSQL_PORT
-        
-    if SW_DEBUG:
-        print sqlHost
-        print sqlUser
-        print sqlPass
-        print sqlDB
-    
-    if margs.debug:
         today = "today"
         debug(margs.debug)
         
@@ -166,8 +157,7 @@ if __name__ == "__main__":
         #dnsModule = DNSModule.DNSModule()
         start(resolver,memcache)
     
-    if margs.file != "":
-        work = 1
-        #importDomains(margs.file)
+    if margs.file is not None:
+        importDomains(margs.file)
         print ("Imported Ok...")
         

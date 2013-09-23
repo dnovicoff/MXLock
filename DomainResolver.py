@@ -28,7 +28,7 @@ class DomainResolver():
     
     def resolveDomains(self):
         timestamp = MXLockClasses.getTimestamp()
-        timeForQuery = timestamp-(3600)
+        timeForQuery = timestamp-(3600*15)
         self.resolveDomains = []
 
         """ Move to DNSDomainResolver """        
@@ -42,13 +42,14 @@ class DomainResolver():
         domainResolver = DNSDomainResolver(self.log)
         
         """ Move this to DNSDomainResolver """
-        select = "SELECT * FROM soa WHERE lilast_check < %s LIMIT %s" % (timeForQuery,self.interval)
+        select =  "SELECT id,vorigin FROM soa WHERE lilast_check < {0} AND id>= {1} AND id<= {2} LIMIT {3}".format(timeForQuery,self.begin,self.begin+self.interval,self.interval)
         self.connection.startTransaction()
         rows = self.connection.execQuery(select)
         self.connection.endCursor()
         ids = ""
-        for row in rows:
-            ids += str(row[0])+","
+        if rows:
+            for row in rows:
+                ids += str(row[0])+","
             
         rowsAffected = 0
         if (ids != ""):                
@@ -58,39 +59,43 @@ class DomainResolver():
             self.connection.updateQuery(update)
             self.connection.commitTransaction()
 
-        ids = ""
-        for row in rows:
-            try:
-                soaID = row[0]
-                domain = row[1]
-                ##message = "Working with domain: %s" % (domain)
-                ## self.log.writeLog(message)
+        if rows:
+            for row in rows:
+                try:
+                    soaID = row[0]
+                    domain = row[1]
                 
-                """ Try twice to make sure we have the domain and not a machine name """
-                serial = self.resolver.getDomainSerial(domain, soaID)
-                ##if self.arrayLength(serial) < 1:
-                ##    serial = self.resolver.getDomainSerial(self.getDomain(domain),soaID)
-                     
-                if len(serial) > 0:
-                    domainResolver.startTransaction()
-                    success = domainResolver.updateSOA(serial,soaID)
-                    if success > 0:
-                        results = self.resolver.getMXNameAndAddress(domain, soaID)
-                        if len(results) > 0:
-                            success = domainResolver.recordResponse(results,soaID,types['MX'],serial['serial'],timeForQuery)
-                            if success > 0:
-                                domainResolver.commitTransaction()
-                                rowsAffected += 1
-                            else:
-                                domainResolver.rollbackTransaction()
+                    """ Try twice to make sure we have the domain and not a machine name """
+                    serial = self.resolver.getDomainSerial(domain, soaID)
+                    if len(serial) < 1:
+                        serial['serial'] = 0
+                    ##if self.arrayLength(serial) < 1:
+                    ##    serial = self.resolver.getDomainSerial(self.getDomain(domain),soaID)
+                    """ 
+                        It has been found that some records will not have an SOA record but have
+                        an MX host record. Look for those.
+                    """
+                
+                    if len(serial) > 0:
+                        domainResolver.startTransaction()
+                        success = domainResolver.updateSOA(serial,soaID)
+                        domainResolver.endCursor()
+                
+                    domainResolver.startTransaction()    
+                    results = self.resolver.getMXNameAndAddress(domain, soaID)
+                    if len(results) > 0:
+                        success = domainResolver.recordResponse(results,soaID,types['MX'],serial['serial'],timeForQuery)
+                        if success > 0:
+                            domainResolver.commitTransaction()
+                            rowsAffected += 1
                         else:
                             domainResolver.rollbackTransaction()
                     else:
                         domainResolver.rollbackTransaction()
                     domainResolver.endCursor()
-            except:
-                message = "DomainResolver error: %s %s" % (sys.exc_info()[0],self.name)
-                self.log.writeLog(message)
+                except:
+                    message = "DomainResolver error: check dns.rcode.SERVFAIL %s %s" % (sys.exc_info()[0],self.name)
+                    self.log.writeLog(message)
         
         return rowsAffected
             
@@ -103,7 +108,3 @@ class DomainResolver():
         self.name = name
         
         
-        
-        
-        
-         
