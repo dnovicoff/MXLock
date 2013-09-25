@@ -17,7 +17,7 @@ class Memcache(object):
             self.log.writeLog(message)
     
     def readMemcache(self,key):
-        results = self.mc.get(key)
+        results = self.mc.get('%smachines' % key)
         return results
     
     def writeMemcache(self,key,value):
