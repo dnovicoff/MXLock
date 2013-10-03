@@ -5,6 +5,7 @@ Copywrite: Sendwell 2013
 """
 
 import DomainRecord
+import MXLockClasses
 
 class DomainReader(object):
     
@@ -73,7 +74,28 @@ class DomainReader(object):
             return domain.exists(rrID)
         except KeyError as e:
             print "DomainReader mxExists: error: %s" % (e)
+            
+    def getNextDomainID(self):
+        domain = None
+        if self.domains.__len__() > 0:
+            domain = self.domains.keys()[self.curPos]
+            self.curPos = MXLockClasses.getNextCurPos(self.domains, self.curPos)
+        return domain
+    
+    def getNextDomainMXID(self,soaID):
+        mx = None
+        if self.domains.__len__() > 0:
+            domain = self.domains[soaID]
+            mx = domain.getNextMXID()
+        return mx
+            
+    def getLength(self):
+        return self.domains.__len__()
+    
+    def getMXLength(self,soaID):
+        domain = self.domains[soaID]
+        return domain.getMXLength()
     
     def __init__(self):
         self.domains = {}
-               
+        self.curPos = 0       

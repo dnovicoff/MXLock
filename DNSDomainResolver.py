@@ -16,17 +16,12 @@ class DNSDomainResolver(object):
         key = 0
         try:
             select = "SELECT id FROM geo_country WHERE vcountry='%s' AND vcode='%s'" % (name,code)
-            rows = self.connect.execQuery(select)
-            if len(rows) > 0:
-                for row in rows:
-                    key = int(row[0])
+            key = self.connect.getColumnInteger(select)
             if key == 0:
                 insert = "INSERT INTO geo_country (vcountry,vcode) VALUES ('%s','%s')" % (name,code)
                 key = self.connect.insertQuery(insert)
                 sql = "SELECT currval('geo_country_id_seq')"
-                rows = self.connect.execQuery(sql)
-                for row in rows:
-                    key = row[0]
+                key = self.connect.getColumnInteger(sql)
         except:
             message = "GeoIP error: %s  %s %s %s" % (sys.exc_info()[0],name,code,addr)
             self.log.writeLog(message)
@@ -36,18 +31,13 @@ class DNSDomainResolver(object):
         keys = {'country' : 4, 'city' : 1}
         try:
             select = "SELECT id FROM geo_city WHERE vcity='%s' AND vstate='%s' AND vzip='%s' AND varea_code='%s'" % (ci['city'],ci['region_name'],ci['postal_code'],ci['area_code'])
-            rows = self.connect.execQuery(select)
-            if len(rows) > 0:
-                for row in rows:
-                    keys['city'] = int(row[0])
+            keys['city'] = self.connect.getColumnInteger(select)
             keys['country'] = self.getGEOIPCountry(name,code,addr)
             if ci['city'] != "" and ci['region_name'] != "":
                 insert = "INSERT INTO geo_city (vcity,vstate,vzip,varea_code,ligeo_country_id) VALUES ('%s','%s','%s','%s',%s)" % (ci['city'],ci['region_name'],ci['postal_code'],ci['area_code'],keys['country'])
                 key = self.connect.insertQuery(insert)
                 sql = "SELECT currval('geo_city_id_seq')"
-                rows = self.connect.execQuery(sql)
-                for row in rows:
-                    keys['city'] = row[0]
+                keys['city'] = self.connect.getColumnInteger(sql)
         except:
             message = "GeoIP getGEOIPCity error: %s %s %s %s" % (sys.exc_info()[0],name,code,addr)
             self.log.writeLog(message)
@@ -58,18 +48,13 @@ class DNSDomainResolver(object):
         try:
             ci = self.gip.getCityByAddr(addr)
             select = "SELECT id FROM geo_coordinates WHERE dlatitude=%s AND dlongitude=%s" % (ci['latitude'],ci['longitude'])
-            rows = self.connect.execQuery(select)
-            if len(rows) > 0:
-                for row in rows:
-                    key = int(row[0])
+            key = self.connect.getColumnInteger(select)
             if key == 0: 
                 keys = self.getGEOIPCity(name,code,addr,ci)
                 insert = "INSERT INTO geo_coordinates (dlatitude,dlongitude,ligeo_city_id,ligeo_county_id) VALUES ('%s','%s',%s,%s)" % (ci['latitude'],ci['longitude'],keys['city'],keys['country'])
                 key = self.connect.insertQuery(insert)
                 sql = "SELECT currval('geo_coordinates_id_seq')"
-                rows = self.connect.execQuery(sql)
-                for row in rows:
-                    key = row[0]
+                key = self.connect.getColumnInteger(sql)
         except:
             message = "recordGEOIP error: %s %s %s %s" % (sys.exc_info()[0],name,code,addr)
             self.log.writeLog(message)
@@ -93,6 +78,7 @@ class DNSDomainResolver(object):
         return count
     
     def recordResponse(self,results,soaID,uType,serial,timestamp):
+        count = 0
         try:
             for key in results:
                 tmp = results[key]
@@ -101,49 +87,40 @@ class DNSDomainResolver(object):
                 rr_id = 0
                 rr_address_id = 0
                     
-                sql = "SELECT * FROM rr WHERE vname='%s'" % (key)
-                rows = self.connect.execQuery(sql)
-                if rows:
-                    for row in rows:
-                        rr_id = row[5]
-                    sql = "UPDATE rr SET liserial='%s',vname='%s',ipriority=%s WHERE id=%s" % (serial,key,tmp['priority'],soaID)
+                sql = "SELECT id FROM rr WHERE vname='%s'" % (key)
+                rr_id = self.connect.getColumnInteger(sql)
+                if rr_id != 0:
+                    sql = "UPDATE rr SET liserial='%s',vname='%s',ipriority=%s WHERE id=%s" % (serial,key,tmp['priority'],rr_id)
                     count = self.connect.updateQuery(sql)
                 else:
                     sql = "INSERT INTO rr (lisoa_id,liserial,vname,ipriority,litype_id) VALUES (%s,%s,'%s',%s,%s) " % (soaID,serial,key,tmp['priority'],uType)
-                    count = self.connect.insertQuery(sql)
+                    rr_id = self.connect.insertQuery(sql)
                     sql = "SELECT currval('rr_id_seq')"
-                    rows = self.connect.execQuery(sql)
-                    for row in rows:
-                        rr_id = row[0]
+                    rr_id = self.connect.getColumnInteger(sql)
 
                 for aTmp in addrTmp:
                     locationName = self.gip.getCountryNameByAddr(aTmp)
                     locationCode = self.gip.getCountryCodeByName(dKey)
                     geoipKey = self.recordGEOIP(locationName, locationCode,aTmp)
                     
-                    sql = "SELECT * FROM rr_address WHERE vrr_address='%s'" % aTmp
-                    rows = self.connect.execQuery(sql)
-                    if rows:
-                        for row in rows:
-                            rr_address_id = row[0]
-                    else:
+                    sql = "SELECT id FROM rr_address WHERE vrr_address='%s'" % aTmp
+                    rr_address_id = self.connect.getColumnInteger(sql)
+                    if rr_address_id == 0:
                         sql = "INSERT INTO rr_address (vrr_address,ligeo_coordinate_id) VALUES ('%s',%s)" % (aTmp,geoipKey)
                         count = self.connect.insertQuery(sql)
                         sql = "SELECT currval('rr_address_id_seq')"
-                        rows = self.connect.execQuery(sql)
-                        for row in rows:
-                            rr_address_id = row[0]
+                        rr_address_id = self.connect.getColumnInteger(sql)
 
                     """
                     Column id in table rr_history is the foreign key for table rr in MySQL is was called rr_id
                     """
-                    sql = "INSERT INTO rr_history VALUES (%s,%s,CURRENT_TIMESTAMP)" % (rr_id,rr_address_id)
-                    count = self.connect.insertQuery(sql)
-                    
-            return count
+                    if rr_address_id != 0 and rr_id != 0:
+                        sql = "INSERT INTO rr_history VALUES (%s,%s,CURRENT_TIMESTAMP)" % (rr_id,rr_address_id)
+                        count = self.connect.insertQuery(sql)
         except:
             message = "DNSDomainResolver record response error %s %s %s %s %s" % (sys.exc_info()[0],soaID,uType,serial,timestamp)
             self.log.writeLog(message)
+        return count
     
     def commitTransaction(self):
         self.connect.commitTransaction()

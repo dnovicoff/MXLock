@@ -35,12 +35,13 @@ class DNSWorker(threading.Thread):
                 rows = domainResolver.resolveDomains()
             
                 self.number += 1
-                ## message = "%s rows updated: %s" % (self.threadName,rows)
+                message = "%s rows updated: %s" % (self.threadName,rows)
                 ## self.log.writeLog(message)
+                print "DNSWorder: %s" % message
                 self.adjustStart()
                 sleep(60)
             except:
-                print ("Error: DNSWorker: %s" % sys.exc_info()[0])
+                self.log.writeLog("Error: DNSWorker: %s" % sys.exc_info()[0])
                 
                 
                 

@@ -12,6 +12,7 @@ import settings
 import DataConnect
 import client
 import DNSWorker
+import Statistics
 import logger
 import DomainsReader
 import DomainWhoisWorker
@@ -81,6 +82,9 @@ def start(resolver, memcache):
             memcache = MemcacheWriterWorker.MemcacheWriterWorker(domains,begin,interval,domainQty+firstRecord,firstRecord,log)
             memcache.start()
             sleep(5)
+            
+        stats = Statistics.Statistics(domains,log)
+        stats.start()
     
     server = client.client(domains)
     #server.start()

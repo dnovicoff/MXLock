@@ -110,7 +110,7 @@ class DatabaseConnection(object):
             message = "Internal error({0})".format(e.args[0])
         finally:
             self.writeError(message)
-        return uid
+        return int(uid)
     
     def autocommitTransaction(self):
         if self.conn:

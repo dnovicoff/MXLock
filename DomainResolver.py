@@ -26,6 +26,10 @@ class DomainResolver():
             success = 0
         return success
     
+    def loadType(self):
+        sql = "SELECT * FROM rtype"
+        self.connection.startTransaction()
+    
     def resolveDomains(self):
         timestamp = MXLockClasses.getTimestamp()
         timeForQuery = timestamp-(3600*15)
@@ -83,7 +87,7 @@ class DomainResolver():
                 
                     domainResolver.startTransaction()    
                     results = self.resolver.getMXNameAndAddress(domain, soaID)
-                    if len(results) > 0:
+                    if results.__len__() > 0:
                         success = domainResolver.recordResponse(results,soaID,types['MX'],serial['serial'],timeForQuery)
                         if success > 0:
                             domainResolver.commitTransaction()

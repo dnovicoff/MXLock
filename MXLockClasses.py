@@ -3,7 +3,29 @@ MXLock general functions file
 """
 
 import time
+import datetime
 import random
+
+class MXLockError(Exception):
+    
+    def __init__(self,value):
+        self.value = value
+        
+def convertToEpoch(cTime):
+    return (cTime - datetime.datetime(1970,1,1)).total_seconds()
+
+def getNextCurPos(dct,curPos):
+    newCurPos = 0
+    if dct:
+        if curPos+1 < dct.__len__():
+            newCurPos = curPos+1
+    return newCurPos
+
+def writeLog(message,log=None):
+    if log == None:
+        print "%s" % message
+    else:
+        log.writeLog(message)
 
 def getTimestamp():
     timestamp = int(round(time.time()))

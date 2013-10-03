@@ -30,10 +30,10 @@ class Resolver(object):
             answer = self.resolv.query(domain,queryType)
             for rdata in answer:
                 results.append(rdata.address)
+            return results
         except DNSException, e:
             message = "DNS getDomainAddress: %s %s %s %s %s" % (e.__class__,e,domain,dnsID,source)
             self.log.writeLog(message)
-        return results
     
     def getDomainSerial(self,domain,dnsID):
         queryType = "SOA"

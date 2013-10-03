@@ -6,6 +6,7 @@ Copywrite: Sendwell 2013
 
 import re
 import DomainMX
+import MXLockClasses
 
 class DomainRecord(object):
     
@@ -19,6 +20,14 @@ class DomainRecord(object):
                 return self.mx[rrID]
         except KeyError as e:
             print "DomainRecord error: %s" % (e)
+            
+    def getNextMXID(self):
+        mx = None
+        if self.mx.__len__() > 0:
+            print "MX Length: %s  Current Pos: %s" % (self.mx.__len__(),self.curPos)
+            mx = self.mx.keys()[self.curPos]
+            self.curPos = MXLockClasses.getNextCurPos(self.mx, self.curPos)
+        return mx
         
     def getRefresh(self):
         return self.refresh
@@ -88,6 +97,9 @@ class DomainRecord(object):
         for key in self.mx:
             results += self.mx[key].toString()
         return results
+    
+    def getMXLength(self):
+        return self.mx.__len__()
 
     def __init__(self,ID,origin="",minimum=0,TTL=0,refresh=0,retry=0,expire=0,lastcheck=0,locked=False):
         self.minimum = minimum
@@ -101,6 +113,7 @@ class DomainRecord(object):
         self.locked = locked
         
         self.mx = {}
+        self.curPos = 0
         
         
         
