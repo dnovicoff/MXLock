@@ -13,7 +13,7 @@ import MXLockClasses
 
 class DNSWorker(threading.Thread):
         
-    def __init__(self,begin,interval,end,firstRecord,log=None):
+    def __init__(self,begin,interval,end,firstRecord,log=None,keys=None):
         threading.Thread.__init__(self)
         self.threadName = self.getName()
         self.begin = begin
@@ -22,6 +22,8 @@ class DNSWorker(threading.Thread):
         self.first = firstRecord
         self.number = MXLockClasses.getRandomNumber(0,1000)
         self.log = log
+        self.keys = keys
+        self.types = MXLockClasses.createTypes()
         
     def adjustStart(self):
         self.begin += self.interval
@@ -31,8 +33,8 @@ class DNSWorker(threading.Thread):
     def run(self):
         while True:
             try:
-                domainResolver = DomainResolver.DomainResolver(self.begin,self.interval,self.log,self.threadName)
-                rows = domainResolver.resolveDomains()
+                domainResolver = DomainResolver.DomainResolver(self.begin,self.interval,self.log,self.threadName,15)
+                rows = domainResolver.resolveDomains(self.types,self.keys)
             
                 self.number += 1
                 message = "%s rows updated: %s" % (self.threadName,rows)

@@ -5,8 +5,8 @@ Copywrite: Sendwell 2013
 """
 
 import sys
+import re
 
-import settings
 import geoip
 import DataConnect
 
@@ -27,14 +27,20 @@ class DNSDomainResolver(object):
             self.log.writeLog(message)
         return key
     
-    def getGEOIPCity(self,name,code,addr,ci):
-        keys = {'country' : 4, 'city' : 1}
+    def getGEOIPCity(self,name,code,addr,ci,keys):
         try:
-            select = "SELECT id FROM geo_city WHERE vcity='%s' AND vstate='%s' AND vzip='%s' AND varea_code='%s'" % (ci['city'],ci['region_name'],ci['postal_code'],ci['area_code'])
+            city = str(ci['city'])
+            city = city.replace("'", "\'")
+            if re.match(r".+", city, re.I):
+                cityTmp = re.match(r".+", city, re.I)
+                city = cityTmp.match(1)
+            print "ci city: %s %s" % (ci['city'],city)
+            city['city'] = city
+            select = """SELECT id FROM geo_city WHERE vcity='%s' AND vstate='%s' AND vzip='%s' AND varea_code='%s'""" % (ci['city'],ci['region_name'],ci['postal_code'],ci['area_code'])
             keys['city'] = self.connect.getColumnInteger(select)
             keys['country'] = self.getGEOIPCountry(name,code,addr)
             if ci['city'] != "" and ci['region_name'] != "":
-                insert = "INSERT INTO geo_city (vcity,vstate,vzip,varea_code,ligeo_country_id) VALUES ('%s','%s','%s','%s',%s)" % (ci['city'],ci['region_name'],ci['postal_code'],ci['area_code'],keys['country'])
+                insert = """INSERT INTO geo_city (vcity,vstate,vzip,varea_code,ligeo_country_id) VALUES ('%s','%s','%s','%s',%s)""" % (ci['city'],ci['region_name'],ci['postal_code'],ci['area_code'],keys['country'])
                 key = self.connect.insertQuery(insert)
                 sql = "SELECT currval('geo_city_id_seq')"
                 keys['city'] = self.connect.getColumnInteger(sql)
@@ -43,14 +49,14 @@ class DNSDomainResolver(object):
             self.log.writeLog(message)
         return keys
     
-    def recordGEOIP(self,name,code,addr):
+    def recordGEOIP(self,name,code,addr,keys):
         key = 0
         try:
             ci = self.gip.getCityByAddr(addr)
             select = "SELECT id FROM geo_coordinates WHERE dlatitude=%s AND dlongitude=%s" % (ci['latitude'],ci['longitude'])
             key = self.connect.getColumnInteger(select)
             if key == 0: 
-                keys = self.getGEOIPCity(name,code,addr,ci)
+                keys = self.getGEOIPCity(name,code,addr,ci,keys)
                 insert = "INSERT INTO geo_coordinates (dlatitude,dlongitude,ligeo_city_id,ligeo_county_id) VALUES ('%s','%s',%s,%s)" % (ci['latitude'],ci['longitude'],keys['city'],keys['country'])
                 key = self.connect.insertQuery(insert)
                 sql = "SELECT currval('geo_coordinates_id_seq')"
@@ -77,7 +83,7 @@ class DNSDomainResolver(object):
             self.log.writeLog(message)
         return count
     
-    def recordResponse(self,results,soaID,uType,serial,timestamp):
+    def recordResponse(self,results,soaID,uType,serial,timestamp,keys):
         count = 0
         try:
             for key in results:
@@ -101,7 +107,7 @@ class DNSDomainResolver(object):
                 for aTmp in addrTmp:
                     locationName = self.gip.getCountryNameByAddr(aTmp)
                     locationCode = self.gip.getCountryCodeByName(dKey)
-                    geoipKey = self.recordGEOIP(locationName, locationCode,aTmp)
+                    geoipKey = self.recordGEOIP(locationName, locationCode,aTmp,keys)
                     
                     sql = "SELECT id FROM rr_address WHERE vrr_address='%s'" % aTmp
                     rr_address_id = self.connect.getColumnInteger(sql)
@@ -118,7 +124,7 @@ class DNSDomainResolver(object):
                         sql = "INSERT INTO rr_history VALUES (%s,%s,CURRENT_TIMESTAMP)" % (rr_id,rr_address_id)
                         count = self.connect.insertQuery(sql)
         except:
-            message = "DNSDomainResolver record response error %s %s %s %s %s" % (sys.exc_info()[0],soaID,uType,serial,timestamp)
+            message = "DNSDomainResolver recordResponse error %s SOA ID: %s TIMESTAMP %s" % (sys.exc_info()[0],soaID,timestamp)
             self.log.writeLog(message)
         return count
     

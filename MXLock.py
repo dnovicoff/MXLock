@@ -57,6 +57,7 @@ def start(resolver, memcache):
     domainQty = connect.getColumnInteger("SELECT count(*) FROM soa")
     firstRecord = connect.getColumnInteger("SELECT id FROM soa ORDER BY id ASC LIMIT 1")
     connect.endCursor()
+    geoKeys = MXLockClasses.createGEOIPKeys()
     
     domains = DomainsReader.DomainReader()
     logName = MXLockClasses.logName()
@@ -68,7 +69,7 @@ def start(resolver, memcache):
         split = domainQty/settings.DBG_THREADS_RESOLVER
         for x in range(0,settings.DBG_THREADS_RESOLVER):
             begin = firstRecord+(x*split)
-            worker = DNSWorker.DNSWorker(begin,interval,domainQty+firstRecord,firstRecord,log)
+            worker = DNSWorker.DNSWorker(begin,interval,domainQty+firstRecord,firstRecord,log,geoKeys)
             worker.start()
             sleep(5)
             
@@ -86,8 +87,8 @@ def start(resolver, memcache):
         stats = Statistics.Statistics(domains,log)
         stats.start()
     
-    server = client.client(domains)
-    #server.start()
+    server = client.client(domains,log,geoKeys)
+    server.start()
 
 def debug(domainName,dnsServer = None):
     try:

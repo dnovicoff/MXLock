@@ -4,6 +4,8 @@ Purpose:
 Copywrite: Sendwell 2013
 """
 
+import threading
+
 import DomainRecord
 import MXLockClasses
 
@@ -16,6 +18,7 @@ class DomainReader(object):
 
     def updateMX(self,ID,mx):
         try:
+            self.semaphore.acquire()
             if ID in self.domains:
                 domain = self.domains[ID]
                 machine = domain.getMX(mx['rrID'])
@@ -25,21 +28,31 @@ class DomainReader(object):
                 machine.setType(mx['rType'])
         except KeyError as e:
             print "DomainReader updateMX: error: %s" % (e)
+        finally:
+            self.semaphore.release()
         
     def addMX(self,soaID,mx):
         try:
+            self.semaphore.acquire()
             if soaID in self.domains:
                 domain = self.domains[soaID]
                 domain.setMX(mx['rrID'],mx['machine'],mx['priority'],mx['address'],mx['rType'])
         except KeyError as e:
             print "DomainReader addMX: error: %s" % (e)
+        finally:
+            self.semaphore.release()
     
     def addDomain(self,dct):
-        domain = DomainRecord.DomainRecord(dct['soaID'],dct['domain'],dct['minimum'],dct['ttl'],dct['refresh'],dct['retry'],dct['expire'])
-        self.domains[dct['soaID']] = domain
+        try:
+            self.semaphore.acquire()
+            domain = DomainRecord.DomainRecord(dct['soaID'],dct['domain'],dct['minimum'],dct['ttl'],dct['refresh'],dct['retry'],dct['expire'])
+            self.domains[dct['soaID']] = domain
+        finally:
+            self.semaphore.release()
         
     def updateDomain(self,dct):
         try:
+            self.semaphore.acquire()
             if dct['soaID'] in self.domains:
                 domainRecord = self.domains[dct['soaID']]
                 domainRecord.setRefresh(dct['refresh'])
@@ -49,6 +62,8 @@ class DomainReader(object):
                 domainRecord.setTTL(dct['ttl'])
         except KeyError as e: 
             print "DomainReader updateDomain: error: %s" % (e)
+        finally:
+            self.semaphore.release()
             
     def getDomain(self,ID):
         domain = None
@@ -98,4 +113,6 @@ class DomainReader(object):
     
     def __init__(self):
         self.domains = {}
-        self.curPos = 0       
+        self.curPos = 0
+        self.semaphore = threading.BoundedSemaphore()
+               

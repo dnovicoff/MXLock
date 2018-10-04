@@ -24,7 +24,6 @@ class DomainRecord(object):
     def getNextMXID(self):
         mx = None
         if self.mx.__len__() > 0:
-            print "MX Length: %s  Current Pos: %s" % (self.mx.__len__(),self.curPos)
             mx = self.mx.keys()[self.curPos]
             self.curPos = MXLockClasses.getNextCurPos(self.mx, self.curPos)
         return mx

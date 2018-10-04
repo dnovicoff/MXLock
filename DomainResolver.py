@@ -26,27 +26,14 @@ class DomainResolver():
             success = 0
         return success
     
-    def loadType(self):
-        sql = "SELECT * FROM rtype"
-        self.connection.startTransaction()
-    
-    def resolveDomains(self):
+    def resolveDomains(self,types,keys):
         timestamp = MXLockClasses.getTimestamp()
-        timeForQuery = timestamp-(3600*15)
+        self.timeForQuery = timestamp-(3600*self.hours)
         self.resolveDomains = []
-
-        """ Move to DNSDomainResolver """        
-        select = "SELECT * FROM rtype"
-        self.connection.startTransaction()
-        results = self.connection.execQuery(select)
-        types = {}
-        for result in results:
-            types[result[1]] = result[0]
-        self.connection.endCursor()
         domainResolver = DNSDomainResolver(self.log)
         
         """ Move this to DNSDomainResolver """
-        select =  "SELECT id,vorigin FROM soa WHERE lilast_check < {0} AND id>= {1} AND id<= {2} LIMIT {3}".format(timeForQuery,self.begin,self.begin+self.interval,self.interval)
+        select =  "SELECT id,vorigin FROM soa WHERE lilast_check < {0} AND id>= {1} AND id<= {2} LIMIT {3}".format(self.timeForQuery,self.begin,self.begin+self.interval,self.limit)
         self.connection.startTransaction()
         rows = self.connection.execQuery(select)
         self.connection.endCursor()
@@ -88,7 +75,7 @@ class DomainResolver():
                     domainResolver.startTransaction()    
                     results = self.resolver.getMXNameAndAddress(domain, soaID)
                     if results.__len__() > 0:
-                        success = domainResolver.recordResponse(results,soaID,types['MX'],serial['serial'],timeForQuery)
+                        success = domainResolver.recordResponse(results,soaID,types['MX'],serial['serial'],self.timeForQuery,keys)
                         if success > 0:
                             domainResolver.commitTransaction()
                             rowsAffected += 1
@@ -103,12 +90,15 @@ class DomainResolver():
         
         return rowsAffected
             
-    def __init__(self,begin,interval,log,name):
+    def __init__(self,begin,interval,log,name,ignoreLastCheck=0,limit=100):
         self.resolver = Resolver.Resolver(log)
         self.connection = DataConnect.DatabaseConnection()
         self.begin = begin
         self.interval = interval
         self.log = log
         self.name = name
+        self.hours = ignoreLastCheck
+        self.timeForQuery = 0
+        self.limit = limit
         
         

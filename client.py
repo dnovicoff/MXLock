@@ -10,23 +10,24 @@ import sys
 import re
 
 import DataConnect
-import DomainRecord
+import MXLockClasses
+import DomainResolver
+import MemcacheWriterWorker
 
 class client(threading.Thread):
 
     def writeDomains(self,domain):
         ID = domain[0]
-        origin = str(domain[1])
-        minimum = domain[2]
-        TTL = domain[3]
-        refresh = domain[4]
-        retry = domain[5]
-        expire = domain[6]
-        lastcheck = domain[7]
-        locked = domain[8]
-        domain = DomainRecord.DomainRecord(ID,origin,minimum,TTL,refresh,retry,expire,lastcheck,locked)
-        self.domains.addDomain(ID,domain)
-        self.domains.domainToString(ID)
+        tmp = {}
+        tmp['soaID'] = ID
+        tmp['domain'] = domain[1]
+        tmp['refresh'] = domain[2]
+        tmp['retry'] = domain[3]
+        tmp['expire'] = domain[4]
+        tmp['minimum'] = domain[5]
+        tmp['ttl'] = domain[6]
+        self.domains.addDomain(tmp)
+        return self.domains.domainToString(ID)
 
     def readDomains(self,domain,ID):
         domain = self.domains[ID]
@@ -49,15 +50,14 @@ class client(threading.Thread):
         term = term[:-1]
         term = '%'+term+'%'
         results = ""
-        sql = "SELECT origin FROM soa WHERE origin LIKE '%s'" % (term)
+        sql = "SELECT vorigin FROM soa WHERE vorigin LIKE '%s'" % (term)
         self.connect.startTransaction()
         rows = self.connect.execQuery(sql)
         self.connect.commitTransaction()
         if rows:
             for row in rows:
-                self.writeDomains(row)
                 for x in range (0,len(row)):
-                    results += row[x]+" "
+                    results += row[x]
                 results += "\n"
         if results.__len__() <= 0:
             results = "Could not find domains with search term, %s\n" % term
@@ -65,22 +65,19 @@ class client(threading.Thread):
     
     def findDomains(self,term):
         term = term[:-1]
-        results = ""
-        sql = "SELECT * FROM soa WHERE origin = '%s'" % (term)
+        message = ""
+        sql = "SELECT * FROM soa WHERE vorigin = '%s'" % (term)
         self.connect.startTransaction()
         rows = self.connect.execQuery(sql)
         self.connect.commitTransaction()
         if rows:
             for row in rows:
-                self.writeDomains(row)
-                for x in range(0,len(row)):
-                    results += str(row[x])+" "
-                results += "\n"
-        return results
+                message = self.writeDomains(row)
+        return message
     
     def showTables(self):
         results = ""
-        sql = "SHOW TABLES"
+        sql = "\d"
         self.connect.startTransaction()
         rows = self.connect.execQuery(sql)
         if rows:
@@ -89,11 +86,32 @@ class client(threading.Thread):
         self.connect.commitTransaction()
         return results
     
+    def resolvDomain(self,domain):
+        domain = domain[:-1]
+        rows = None
+        if domain.__len__() > 1:
+            sql = "SELECT * FROM soa WHERE vorigin='%s'" % domain
+            self.connect.startTransaction()
+            rows = self.connect.execQuery(sql)
+            self.connect.endCursor()
+            uid = 0
+            if rows:
+                for row in rows:
+                    uid = row[0] 
+            domainResolver = DomainResolver.DomainResolver(uid,0,self.log,self.threadName,0,1)
+            success = domainResolver.resolveDomains(self.types,self.keys)
+            if success > 0:
+                message = self.writeDomains(row)
+                memcache = MemcacheWriterWorker.MemcacheWriterWorker(self.domains,uid,1,0,0,self.log)
+                memcache.resolvMemcache()
+        return message
+    
     def setRegEx(self):
         self.regEx['showtables'] = re.compile("^Show Tables")
         self.regEx['like'] = re.compile("^like (.*)\\n")
         self.regEx['find'] = re.compile("^find (.*)\\n")
         self.regEx['exec'] = re.compile("^exec (.*)\\n")
+        self.regEx['resolve'] = re.compile("^resolve (.*)\\n")
     
     def listening(self):
         try:
@@ -101,7 +119,7 @@ class client(threading.Thread):
             self.server.bind((self.host,self.port))
             self.server.listen(5)
         except socket.error as e:
-            print "Error server socket error: %s %s" (sys.exc_info()[0],e)
+            MXLockClasses.writeLog("Error server socket error: %s %s" % (sys.exc_info()[0],e),self.log)
     
     def close(self):
         self.server.close()
@@ -118,33 +136,43 @@ class client(threading.Thread):
                 
                 if self.regEx['showtables'].match(data):
                     results = self.showTables()
-                if self.regEx['like'].match(data):
+                elif self.regEx['like'].match(data):
                     match = self.regEx['like'].match(data)
                     results = self.searchDomains(match.group(1))
-                if self.regEx['find'].match(data):
+                elif self.regEx['find'].match(data):
                     match = self.regEx['find'].match(data)
                     results = self.findDomains(match.group(1))
-                if self.regEx['exec'].match(data):
+                elif self.regEx['exec'].match(data):
                     match = self.regEx['exec'].match(data)
                     results = self.execSQL(match.group(1))
+                elif self.regEx['resolve'].match(data):
+                    match = self.regEx['resolve'].match(data)
+                    results = self.resolvDomain(match.group(1))
                 conn.send(results)
             except socket.error as e:
-                print "Failed to create socket %s" % e
+                MXLockClasses.writeLog("DNS Client socket error: %s" % e,self.log)
+            except TypeError as e:
+                MXLockClasses.writeLog("DNS Client type error: %s" % e,self.log)
+            except IndexError as e:
+                MXLockClasses.writeLog("DNS client index error: %s" % (sys.exc_info()[0]),self.log)
             except:
-                print "Error: client thread runnable: %s" % (sys.exc_info()[0])
+                MXLockClasses.writeLog("DNS client error",self.log)
             finally:
                 conn.close()
     
-    def __init__(self,domains):
+    def __init__(self,domains,log=None,keys=None):
         threading.Thread.__init__(self)
         self.threadName = threading.current_thread().name
         self.domains = domains
         self.connect = DataConnect.DatabaseConnection()
         self.host = socket.gethostname()
+        self.log = log
         self.port = 60000
         self.regEx = {}
         self.setRegEx()
         self.listening()
+        self.keys = keys
+        self.types = MXLockClasses.createTypes()
         
         
         

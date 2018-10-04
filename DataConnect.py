@@ -8,6 +8,7 @@ import psycopg2
 import psycopg2.extras
 
 import settings
+import MXLockClasses
 
 class DatabaseConnection(object):
     
@@ -25,7 +26,7 @@ class DatabaseConnection(object):
                 self.curs.execute(query)
                 rows = self.curs.fetchall()
         except psycopg2.Error as ge:
-            message = "General error {0}".format(ge.args[0])[:-2]
+            message = "ExecQuery General error {0}".format(ge.args[0])[:-2]
         except psycopg2.InterfaceError as e:
             message = "Interface error {0}".format(e.args[0])
         except psycopg2.DatabaseError as e:
@@ -37,7 +38,8 @@ class DatabaseConnection(object):
         except psycopg2.InternalError as e:
             message = "Internal error {0}".format(e.args[0])
         finally:
-            self.writeError(message)
+            if message.__len__() > 1: 
+                MXLockClasses.writeLog(message,self.log)
         return rows
     
     def updateQuery(self,query):
@@ -48,7 +50,7 @@ class DatabaseConnection(object):
                 self.curs.execute(query)
                 count = self.curs.rowcount
         except psycopg2.Error as ge:
-            message = "General error {0}".format(ge.args[0])[:-2]
+            message = "UpdateQuery General error {0}".format(ge.args[0])[:-2]
         except psycopg2.InterfaceError as e:
             message = "Interface error {0}".format(e.args[0])
         except psycopg2.DatabaseError as e:
@@ -60,7 +62,8 @@ class DatabaseConnection(object):
         except psycopg2.InternalError as e:
             message = "Internal error {0}".format(e.args[0])
         finally:
-            self.writeError(message)
+            if message.__len__() > 1:
+                MXLockClasses.writeLog(message,self.log)
         return count
     
     def insertQuery(self,query):
@@ -71,7 +74,7 @@ class DatabaseConnection(object):
                 self.curs.execute(query)
                 count = self.curs.rowcount
         except psycopg2.Error as ge:
-            message = "General error({0})".format(ge.args[0])[:-2]
+            message = "InseretQuery General error({0}) ({1})".format(ge.args[0],query)
         except psycopg2.InterfaceError as e:
             message = "Interface error({0})".format(e.args[0])
         except psycopg2.DatabaseError as e:
@@ -83,7 +86,8 @@ class DatabaseConnection(object):
         except psycopg2.InternalError as e:
             message = "Internal error({0})".format(e.args[0])
         finally:
-            self.writeError(message)
+            if message.__len__() > 1:
+                MXLockClasses.writeLog(message,self.log)
         return count
     
     def getColumnInteger(self,query):
@@ -97,7 +101,7 @@ class DatabaseConnection(object):
                     for row in rows:
                         uid = row[0]
         except psycopg2.Error as ge:
-            message = "General error({0})".format(ge.args[0])[:-2]
+            message = "GetColumnInteger General error({0})".format(ge.args[0],query)
         except psycopg2.InterfaceError as e:
             message = "Interface error({0})".format(e.args[0])
         except psycopg2.DatabaseError as e:
@@ -109,7 +113,8 @@ class DatabaseConnection(object):
         except psycopg2.InternalError as e:
             message = "Internal error({0})".format(e.args[0])
         finally:
-            self.writeError(message)
+            if message.__len__() > 1:
+                MXLockClasses.writeLog(message,self.log)
         return int(uid)
     
     def autocommitTransaction(self):
